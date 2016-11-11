@@ -767,15 +767,11 @@ class View {
 				$this->changeLock($path2, ILockingProvider::LOCK_EXCLUSIVE, true);
 
 				if ($internalPath1 === '' and $mount1 instanceof MoveableMount) {
-					if ($this->isTargetAllowed($absolutePath2)) {
-						/**
-						 * @var \OC\Files\Mount\MountPoint | \OC\Files\Mount\MoveableMount $mount1
-						 */
-						$sourceMountPoint = $mount1->getMountPoint();
-						$result = $mount1->moveMount($absolutePath2);
+					$sourceMountPoint = $mount1->getMountPoint();
+					// can fail in case it's not allowed
+					$result = $mount1->moveMount($absolutePath2);
+					if ($result) {
 						$manager->moveMount($sourceMountPoint, $mount1->getMountPoint());
-					} else {
-						$result = false;
 					}
 					// moving a file/folder within the same mount point
 				} elseif ($storage1 === $storage2) {
@@ -1719,50 +1715,6 @@ class View {
 			$pathLen = strlen($path);
 			throw new \OCP\Files\InvalidPathException("Path length($pathLen) exceeds max path length($maxLen): $path");
 		}
-	}
-
-	/**
-	 * check if it is allowed to move a mount point to a given target.
-	 * It is not allowed to move a mount point into a different mount point or
-	 * into an already shared folder
-	 *
-	 * @param string $target path
-	 * @return boolean
-	 */
-	private function isTargetAllowed($target) {
-
-		list($targetStorage, $targetInternalPath) = \OC\Files\Filesystem::resolvePath($target);
-		if (!$targetStorage->instanceOfStorage('\OCP\Files\IHomeStorage')) {
-			\OCP\Util::writeLog('files',
-				'It is not allowed to move one mount point into another one',
-				\OCP\Util::DEBUG);
-			return false;
-		}
-
-		// note: cannot use the view because the target is already locked
-		$fileId = (int)$targetStorage->getCache()->getId($targetInternalPath);
-		if ($fileId === -1) {
-			// target might not exist, need to check parent instead
-			$fileId = (int)$targetStorage->getCache()->getId(dirname($targetInternalPath));
-		}
-
-		// check if any of the parents were shared by the current owner (include collections)
-		$shares = \OCP\Share::getItemShared(
-			'folder',
-			$fileId,
-			\OCP\Share::FORMAT_NONE,
-			null,
-			true
-		);
-
-		if (count($shares) > 0) {
-			\OCP\Util::writeLog('files',
-				'It is not allowed to move one mount point into a shared folder',
-				\OCP\Util::DEBUG);
-			return false;
-		}
-
-		return true;
 	}
 
 	/**
